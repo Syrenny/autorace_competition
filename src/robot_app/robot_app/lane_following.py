@@ -55,17 +55,17 @@ class PIDController:
         return output
 
 pid_params = {
-    'kp': 0.0007,
+    'kp': 0.012,
     'ki': 0,
-    'kd': 0,
+    'kd': 0.0001,
     'setpoint': 0,
 
 }
 
 params = {
-    "view_part": 1 / 3,
-    "max_velocity": 0.2,
-    "min_velocity": 0.05
+    "view_part": 1 / 4,
+    "max_velocity": 0.25,
+    "min_velocity": 0.1
 }
 class LaneFollowing(Node):
     def __init__(self):
@@ -96,8 +96,8 @@ class LaneFollowing(Node):
         _, self.gray = cv2.threshold(self.gray, 160, 255, cv2.THRESH_BINARY)
 
         height, self.width = self.gray.shape
-        left_border = int(0.0 * self.width)
-        right_border = int(1.0 * self.width)
+        left_border = int(0.1 * self.width)
+        right_border = int(0.9 * self.width)
 
         self.gray[:, :left_border] = 0
         self.gray[:, right_border:] = 0 
@@ -160,7 +160,7 @@ class LaneFollowing(Node):
         if self.width is not None:
             cmd_vel = Twist()
             output = self.pid_controller.update(self.error)
-            cmd_vel.linear.x = min(params["max_velocity"] * ((1 - abs(self.error) / (self.width // 2))), params['min_velocity'])
+            cmd_vel.linear.x = max(params["max_velocity"] * ((1 - abs(self.error) / (self.width // 2))), params['min_velocity'])
             cmd_vel.angular.z = -float(output)
             self.cmd_vel_pub.publish(cmd_vel)
 
