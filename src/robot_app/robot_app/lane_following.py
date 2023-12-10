@@ -34,7 +34,7 @@ class PIDController:
         self.kd = kd  # Коэффициент дифференциации
         self.setpoint = setpoint  # Заданное значение
         self.prev_error = 0  # Предыдущее значение ошибки
-        self.integral = 0  # Сумма значений ошибки для интеграции
+        self.integral_sum = 0  # Сумма значений ошибки для интеграции
         self.num_iter = 1
 
     def update(self, current_value):
@@ -43,8 +43,8 @@ class PIDController:
         # Пропорциональная составляющая
         proportional = self.kp * error
         # Интегральная составляющая
-        self.integral += error
-        integral = self.ki * self.integral / self.num_iter
+        self.integral_sum += error
+        integral = self.ki * self.integral_sum / self.num_iter # ??? test
         # Дифференциальная составляющая
         derivative = self.kd * (error - self.prev_error)
         # Общий выход PID-регулятора
@@ -55,16 +55,17 @@ class PIDController:
         return output
 
 pid_params = {
-    'kp': 0.0015,
+    'kp': 0.0007,
     'ki': 0,
-    'kd': 0.004,
+    'kd': 0,
     'setpoint': 0,
 
 }
 
 params = {
     "view_part": 1 / 3,
-    "max_velocity": 0.12
+    "max_velocity": 0.2,
+    "min_velocity": 0.05
 }
 class LaneFollowing(Node):
     def __init__(self):
@@ -148,7 +149,7 @@ class LaneFollowing(Node):
         cv2.circle(self.dst, (int(cpt1[0]), int(cpt1[1])), 2, (0, 0, 255), 2)
         cv2.circle(self.dst, (int(cpt2[0]), int(cpt2[1])), 2, (0, 0, 255), 2)
 
-        self.error = fpt[0] - self.width
+        self.error = self.width // 2 - fpt[0]
         # self.error /= (self.width / 2) # нормализация ошибки относительно ширины картинки 
 
         cv2.imshow("camera", self.frame)
@@ -159,9 +160,8 @@ class LaneFollowing(Node):
         if self.width is not None:
             cmd_vel = Twist()
             output = self.pid_controller.update(self.error)
-            cmd_vel.linear.x = min(params["max_velocity"] * ((1 - abs(self.error) / self.width)), 0.2)
-            cmd_vel.angular.z = -max(output, -2.0) if output < 0 else -min(output, 2.0)
-
+            cmd_vel.linear.x = min(params["max_velocity"] * ((1 - abs(self.error) / (self.width // 2))), params['min_velocity'])
+            cmd_vel.angular.z = -float(output)
             self.cmd_vel_pub.publish(cmd_vel)
 
     def on_shutdown_method(self):
