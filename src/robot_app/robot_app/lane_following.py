@@ -35,6 +35,7 @@ class PIDController:
         self.setpoint = setpoint  # Заданное значение
         self.prev_error = 0  # Предыдущее значение ошибки
         self.integral = 0  # Сумма значений ошибки для интеграции
+        self.num_iter = 1
 
     def update(self, current_value):
         # Расчет ошибки
@@ -43,30 +44,32 @@ class PIDController:
         proportional = self.kp * error
         # Интегральная составляющая
         self.integral += error
-        integral = self.ki * self.integral
+        integral = self.ki * self.integral / self.num_iter
         # Дифференциальная составляющая
         derivative = self.kd * (error - self.prev_error)
         # Общий выход PID-регулятора
         output = proportional + integral + derivative
         # Сохранение текущего значения ошибки для использования на следующем шаге
         self.prev_error = error
+        self.num_iter += 1 # ??? test
         return output
 
 pid_params = {
-    'kp': 0.08,
+    'kp': 0.0015,
     'ki': 0,
-    'kd': 0,
+    'kd': 0.004,
     'setpoint': 0,
 
 }
 
 params = {
-    "view_part": 1 / 3
+    "view_part": 1 / 3,
+    "max_velocity": 0.12
 }
 class LaneFollowing(Node):
     def __init__(self):
         super().__init__('lanefollowing')
-        self.img_sub = self.create_subscription(Image, '/color/image', self.subs_callback, 10)
+        self.img_sub = self.create_subscription(Image, '/color/image_projected_compensated', self.subs_callback, 10)
         self.cmd_vel_pub = self.create_publisher(Twist, '/cmd_vel', 10)
         self.update_timer = self.create_timer(0.01, self.update_callback)
         self.bridge = CvBridge()
@@ -79,6 +82,9 @@ class LaneFollowing(Node):
         self.prevpt1 = np.array([280, 60])
         self.prevpt2 = np.array([560, 60])
         self.error = 0
+        self.width = None
+
+        rclpy.get_default_context().on_shutdown(self.on_shutdown_method)
 
     def subs_callback(self, msg):
         self.frame = self.bridge.imgmsg_to_cv2(msg, "bgr8")
@@ -88,9 +94,9 @@ class LaneFollowing(Node):
         self.gray = cv2.cvtColor(self.frame, cv2.COLOR_BGR2GRAY)
         _, self.gray = cv2.threshold(self.gray, 160, 255, cv2.THRESH_BINARY)
 
-        height, width = self.gray.shape
-        left_border = int(0.10 * width)
-        right_border = int(0.9 * width)
+        height, self.width = self.gray.shape
+        left_border = int(0.0 * self.width)
+        right_border = int(1.0 * self.width)
 
         self.gray[:, :left_border] = 0
         self.gray[:, right_border:] = 0 
@@ -142,19 +148,31 @@ class LaneFollowing(Node):
         cv2.circle(self.dst, (int(cpt1[0]), int(cpt1[1])), 2, (0, 0, 255), 2)
         cv2.circle(self.dst, (int(cpt2[0]), int(cpt2[1])), 2, (0, 0, 255), 2)
 
-        self.error = self.dst.shape[1] // 2 - fpt[0]
+        self.error = fpt[0] - self.width
+        # self.error /= (self.width / 2) # нормализация ошибки относительно ширины картинки 
 
         cv2.imshow("camera", self.frame)
         cv2.imshow("gray", self.dst)
         cv2.waitKey(1)
 
     def update_callback(self):
-        cmd_vel = Twist()
-        output = self.pid_controller.update(self.error)
-        cmd_vel.linear.x = 0.2
-        cmd_vel.angular.z = -float(output)
+        if self.width is not None:
+            cmd_vel = Twist()
+            output = self.pid_controller.update(self.error)
+            cmd_vel.linear.x = min(params["max_velocity"] * ((1 - abs(self.error) / self.width)), 0.2)
+            cmd_vel.angular.z = -max(output, -2.0) if output < 0 else -min(output, 2.0)
 
-        self.cmd_vel_pub.publish(cmd_vel)
+            self.cmd_vel_pub.publish(cmd_vel)
+
+    def on_shutdown_method(self):
+        cmd_vel = Twist()
+        cmd_vel.linear.x = 0
+        cmd_vel.linear.y = 0
+        cmd_vel.linear.z = 0
+        cmd_vel.angular.x = 0
+        cmd_vel.angular.y = 0
+        cmd_vel.angular.z = 0
+        self.cmd_vel_pub.publish(cmd_vel) 
 
 
 def main(args=None):
