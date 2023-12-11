@@ -97,7 +97,7 @@ class LaneFollowing(Node):
 
         height, self.width = self.gray.shape
         left_border = int(0.1 * self.width)
-        right_border = int(0.9 * self.width)
+        right_border = int(0.5 * self.width)
 
         self.gray[:, :left_border] = 0
         self.gray[:, right_border:] = 0 
