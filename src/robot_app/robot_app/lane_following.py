@@ -7,17 +7,6 @@ import numpy as np
 from geometry_msgs.msg import Twist
 import time
 
-def keep_white_and_yellow(image):
-    # in gbr
-    white_mask = cv2.inRange(image, np.array([240, 240, 240], dtype=np.uint8), np.array([255, 255, 255], dtype=np.uint8))
-    yellow_mask = cv2.inRange(image, np.array([0, 100, 0], dtype=np.uint8), np.array([90, 255, 255], dtype=np.uint8))
-    road_mask = cv2.inRange(image, np.array([0, 0, 0], dtype=np.uint8), np.array([60, 60, 60], dtype=np.uint8))
-    combined_mask = cv2.bitwise_or(white_mask, yellow_mask)
-    combined_mask = cv2.bitwise_or(combined_mask, road_mask)
-    result_image = cv2.bitwise_and(image, image, mask=combined_mask)
-
-    return result_image
-
 def keep_middle(image, left_border, right_border):
     _, width = image.shape
     left_border = int(left_border * width)
@@ -32,13 +21,6 @@ def keep_road(image):
     road_mask = cv2.bitwise_xor(road_mask, corners_mask)
     result_image = cv2.bitwise_and(np.ones_like(image) * 255, np.ones_like(image) * 255, mask=road_mask)
     return result_image
-
-def leave_the_largest_contour(image):
-    contours, _ = cv2.findContours(image, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-    largest_contour = max(contours, key=cv2.contourArea)
-    result = np.zeros_like(image)
-    cv2.drawContours(result, [largest_contour], -1, (255, 255, 255), thickness=cv2.FILLED)
-    return result
 
 
 class PIDController:
@@ -67,7 +49,7 @@ class PIDController:
         return output
 
 pid_params = {
-    'kp': 0.008,
+    'kp': 0.01,
     'ki': 0.0,
     'kd': 0.0,
     'setpoint': 0,
@@ -78,9 +60,10 @@ params = {
     "view_part": 1 / 4,
     "left_border_crop": 0.0, 
     "right_border_crop": 1.0,
-    "max_velocity": 0.2,
-    "min_velocity": 0.1,
-    "error_impact_on_linear_vel": 1.5, # Степень >= 1.0. Чем больше значение, тем больше линейная скорость зависит от ошибки
+    "max_velocity": 0.4,
+    "min_velocity": 0.05,
+    "error_impact_on_linear_vel": 4, # Степень >= 1.0. Чем больше значение, тем больше линейная скорость зависит от ошибки
+    "previous_point_impact": 0.6, # 0 <= x < 1.0
     "connectivity": 8
 }
 
@@ -133,34 +116,9 @@ class LaneFollowing(Node):
             largest_area_index = np.argmax(stats[1:, cv2.CC_STAT_AREA]) + 1
             # Получаем центроиду для области с наибольшей площадью
             if self.prevpt is not None:
-                self.prevpt = (self.prevpt + int(centroids[largest_area_index][0])) // 2
+                self.prevpt = self.prevpt * params["previous_point_impact"] + centroids[largest_area_index][0] * (1 - params["previous_point_impact"])
             else:
                 self.prevpt = int(centroids[largest_area_index][0])
-                
-        # self.dst = leave_the_largest_contour(self.dst)
-
-        # _, _, _, all_centroids = cv2.connectedComponentsWithStats(self.dst)
-        # all_centroids = all_centroids[1:] # Исключаем центроиду фона
-        # centroids = []
-        # for (px, py) in all_centroids:
-        #     px = min(int(px), self.width - 1)
-        #     py = min(int(py) + blacked_part_size, self.height - 1)
-        #     # Проверка цвета пикселя в области центроида
-        #     if self.gray[px, py] == 255:
-        #         centroids.append((px, py))
-        # retval = len(centroids)
-        # if retval > 0: 
-        #     mindistance = []
-        #     for (px, _) in centroids:
-        #         mindistance.append(np.abs(px - self.prevpt))
-        #     minlb1 = np.argmin(mindistance)
-        #     cpt1 = centroids[minlb1][0]
-        #     threshdistance = min(mindistance)
-        #     if threshdistance > 100:
-        #         cpt1 = self.prevpt
-        # else: 
-        #     cpt1 = self.prevpt
-        # self.prevpt = cpt1
         fpt = (self.prevpt, window_center)
 
         self.error = fpt[0] - self.width // 2
