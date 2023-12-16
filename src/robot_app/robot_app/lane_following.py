@@ -55,29 +55,27 @@ pid_params = {
 }
 
 params = {
-    "max_depth": 100,
     "top_border_crop": 7 / 10,
     "bottom_border_crop": 9 / 10, # top_border_crop < bottom_border_crop
     "left_border_crop": 0.0, 
-    "right_border_crop": 0.7, # left_border_crop < right_border_crop 
+    "right_border_crop": 1.0, # left_border_crop < right_border_crop 
     "max_velocity": 0.35,
     "min_velocity": 0.05,
     # Степень >= 1.0. Чем больше значение, тем больше линейная скорость зависит от ошибки
     "error_impact_on_linear_vel": 2, 
     "previous_point_impact": 0.0, # 0 <= x < 1.0
-    "connectivity": 8
+    "connectivity": 8,
 }
 
 class LaneFollowing(Node):
     def __init__(self):
         super().__init__('lanefollowing')
         self.img_sub = self.create_subscription(Image, '/color/image_projected_compensated', self.subs_callback, 10)
-        self.img_depth_sub = self.create_subscription(Image, '/depth/image', self.depth_callback, 10)
         self.cmd_vel_pub = self.create_publisher(Twist, '/cmd_vel', 10)
         self.update_timer = self.create_timer(0.01, self.update_callback)
         self.bridge = CvBridge()
 
-        self.allow_running = True
+        self.allow_running = False
 
         self.pid_controller = PIDController(**pid_params)
         self.width = None
@@ -91,16 +89,9 @@ class LaneFollowing(Node):
 
         rclpy.get_default_context().on_shutdown(self.on_shutdown_method)
 
-    def depth_callback(self, msg):
-        image = self.bridge.imgmsg_to_cv2(msg, "32FC1")
-        self.depth_mask =  cv2.inRange(image, 
-                                       np.array([0], dtype=np.uint8), 
-                                       np.array([params['max_depth']], dtype=np.uint8))
-
     def subs_callback(self, msg):
         self.frame = self.bridge.imgmsg_to_cv2(msg, "bgr8")
         self.original_image = self.frame
-        # self.frame = keep_white_and_yellow(self.frame)
         self.frame = keep_road(self.frame)
 
         self.gray = cv2.cvtColor(self.frame, cv2.COLOR_BGR2GRAY)
@@ -129,23 +120,24 @@ class LaneFollowing(Node):
                 self.prevpt = self.prevpt * params["previous_point_impact"] + centroids[largest_area_index][0] * (1 - params["previous_point_impact"])
             else:
                 self.prevpt = int(centroids[largest_area_index][0])
+
         fpt = (self.prevpt, window_center)
 
         self.error = fpt[0] - self.width // 2
         # self.error /= (self.self.width / 2) # нормализация ошибки относительно ширины картинки 
         # Рисование
         cv2.cvtColor(self.dst, cv2.COLOR_GRAY2BGR)
-        image_with_rectangle = cv2.rectangle(self.frame, 
-                                             (left_crop, top_crop), 
-                                             (right_crop, bottom_crop), 
-                                             (0, 255, 0), 
-                                             2, 
-                                             cv2.LINE_AA)
+        cv2.rectangle(self.frame, 
+                      (left_crop, top_crop), 
+                      (right_crop, bottom_crop), 
+                      (0, 255, 0), 
+                      2, 
+                      cv2.LINE_AA)
         cv2.circle(self.frame, ((self.width // 2), window_center), 2, (0, 0, 255), 2)
         cv2.circle(self.frame, (int(fpt[0]), int(fpt[1])), 6, (0, 0, 255), 2)
         cv2.imshow("camera", self.frame)
         # cv2.imshow("gray", self.dst)
-        # cv2.imshow("original_image", self.original_image)
+        cv2.imshow("original_image", self.original_image)
         cv2.waitKey(1)
 
     def update_callback(self):

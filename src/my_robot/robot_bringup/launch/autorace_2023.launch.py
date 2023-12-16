@@ -18,7 +18,6 @@ def generate_launch_description():
     # Setup project paths
     pkg_project_bringup = get_package_share_directory('robot_bringup')
     pkg_project_description = get_package_share_directory('robot_description')
-    pkg_autorace_camera = get_package_share_directory('autorace_camera')
     pkg_ros_gz_sim = get_package_share_directory('ros_gz_sim')
 
     urdf_path  =  os.path.join(pkg_project_description, 'urdf', 'robot.urdf.xacro')
@@ -78,14 +77,7 @@ def generate_launch_description():
             "use_sim_time": True,
         }],
         output='screen'
-    )
-    
-    # Extrinsic camera
-    camera = IncludeLaunchDescription(
-        PythonLaunchDescriptionSource(
-            os.path.join(pkg_autorace_camera, 'launch', 'extrinsic_camera_calibration.launch.py')),
-    )
-   
+    )   
 
     return LaunchDescription([
         gz_sim,
@@ -94,7 +86,6 @@ def generate_launch_description():
         bridge,
         robot_state_publisher,
         rviz,
-        camera,
         TimerAction(
             period=0.0,
             actions=[create])

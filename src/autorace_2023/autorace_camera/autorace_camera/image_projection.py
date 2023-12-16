@@ -28,7 +28,7 @@ class ImageProjection(Node):
             self.sub_image_original = self.create_subscription(CompressedImage, '/color/image/compressed', self.cbImageProjection, 1)
         elif self.sub_image_type == "raw":
             # subscribes raw image 
-            self.sub_image_original = self.create_subscription(Image, '/color/image', self.cbImageProjection, 1)
+            self.sub_image_original = self.create_subscription(Image, '/color/depth_filtered', self.cbImageProjection, 1)
 
         if self.pub_image_type == "compressed":
             # publishes ground-project image in compressed type 

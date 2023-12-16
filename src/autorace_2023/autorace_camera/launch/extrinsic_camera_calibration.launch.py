@@ -47,7 +47,8 @@ def generate_launch_description():
             parameters=[config_proj,
                         {"is_calibrating": LaunchConfiguration('is_calibrating')}],
             remappings=[
-            ('/color/image_output', '/color/image_projected')]
+            ('/color/image_output', '/color/image_projected'),
+            ('/color/image', '/color/depth_filtered')]
       )
     
     node_compensation_projection = Node(
