@@ -7,19 +7,18 @@ import numpy as np
 from geometry_msgs.msg import Twist
 import time
 
-def keep_middle(image, left_border, right_border):
-    _, width = image.shape
-    left_border = int(left_border * width)
-    right_border = int(right_border * width)
-    image[:, :left_border] = 0
-    image[:, right_border:] = 0
-    return image
 
 def keep_road(image):
-    corners_mask = cv2.inRange(image, np.array([0, 0, 0], dtype=np.uint8), np.array([2, 2, 2], dtype=np.uint8))
-    road_mask = cv2.inRange(image, np.array([0, 0, 0], dtype=np.uint8), np.array([60, 60, 60], dtype=np.uint8))
+    corners_mask = cv2.inRange(image, 
+                               np.array([0, 0, 0], dtype=np.uint8), 
+                               np.array([2, 2, 2], dtype=np.uint8))
+    road_mask = cv2.inRange(image, 
+                            np.array([0, 0, 0], dtype=np.uint8), 
+                            np.array([60, 60, 60], dtype=np.uint8))
     road_mask = cv2.bitwise_xor(road_mask, corners_mask)
-    result_image = cv2.bitwise_and(np.ones_like(image) * 255, np.ones_like(image) * 255, mask=road_mask)
+    result_image = cv2.bitwise_and(np.ones_like(image) * 255, 
+                                   np.ones_like(image) * 255, 
+                                   mask=road_mask)
     return result_image
 
 
@@ -49,7 +48,7 @@ class PIDController:
         return output
 
 pid_params = {
-    'kp': 0.01,
+    'kp': 0.004,
     'ki': 0.0,
     'kd': 0.0,
     'setpoint': 0,
@@ -57,13 +56,15 @@ pid_params = {
 
 params = {
     "max_depth": 100,
-    "view_part": 1 / 4,
+    "top_border_crop": 7 / 10,
+    "bottom_border_crop": 9 / 10, # top_border_crop < bottom_border_crop
     "left_border_crop": 0.0, 
-    "right_border_crop": 1.0,
-    "max_velocity": 0.4,
+    "right_border_crop": 0.7, # left_border_crop < right_border_crop 
+    "max_velocity": 0.35,
     "min_velocity": 0.05,
-    "error_impact_on_linear_vel": 4, # Степень >= 1.0. Чем больше значение, тем больше линейная скорость зависит от ошибки
-    "previous_point_impact": 0.6, # 0 <= x < 1.0
+    # Степень >= 1.0. Чем больше значение, тем больше линейная скорость зависит от ошибки
+    "error_impact_on_linear_vel": 2, 
+    "previous_point_impact": 0.0, # 0 <= x < 1.0
     "connectivity": 8
 }
 
@@ -76,22 +77,25 @@ class LaneFollowing(Node):
         self.update_timer = self.create_timer(0.01, self.update_callback)
         self.bridge = CvBridge()
 
-        self.pid_controller = PIDController(**pid_params)
+        self.allow_running = True
 
+        self.pid_controller = PIDController(**pid_params)
+        self.width = None
         self.depth_mask = None
         self.frame = None
         self.gray = None
         self.dst = None
         self.prevpt = None
         self.error = 0
-        self.width = None
         self.original_image = None
 
         rclpy.get_default_context().on_shutdown(self.on_shutdown_method)
 
     def depth_callback(self, msg):
         image = self.bridge.imgmsg_to_cv2(msg, "32FC1")
-        self.depth_mask =  cv2.inRange(image, np.array([0], dtype=np.uint8), np.array([params['max_depth']], dtype=np.uint8))
+        self.depth_mask =  cv2.inRange(image, 
+                                       np.array([0], dtype=np.uint8), 
+                                       np.array([params['max_depth']], dtype=np.uint8))
 
     def subs_callback(self, msg):
         self.frame = self.bridge.imgmsg_to_cv2(msg, "bgr8")
@@ -102,13 +106,19 @@ class LaneFollowing(Node):
         self.gray = cv2.cvtColor(self.frame, cv2.COLOR_BGR2GRAY)
         self.gray = cv2.GaussianBlur(self.gray, (9, 9), cv2.BORDER_DEFAULT)
         _, self.gray = cv2.threshold(self.gray, 160, 255, cv2.THRESH_BINARY)
+        height, self.width = self.gray.shape
 
-        self.gray = keep_middle(self.gray, params["left_border_crop"], params["right_border_crop"])
-        self.height, self.width = self.gray.shape
-        
-        blacked_part_size = int(self.gray.shape[0] * (1 - params['view_part']))
-        window_center = blacked_part_size + (self.height - blacked_part_size) // 2
-        self.dst = self.gray[blacked_part_size:, :].astype(np.uint8)
+        left_crop = int(params["left_border_crop"] * self.width)
+        right_crop = int(params["right_border_crop"] * self.width)
+        self.gray[:, :left_crop] = 0
+        self.gray[:, right_crop:] = 0
+
+
+        top_crop = int(height * params["top_border_crop"])
+        bottom_crop = int(height * params["bottom_border_crop"])
+        window_height = bottom_crop - top_crop
+        window_center = top_crop + window_height // 2
+        self.dst = self.gray[top_crop: bottom_crop, :].astype(np.uint8)
 
         num_labels, labels, stats, centroids = cv2.connectedComponentsWithStats(self.dst, connectivity=params["connectivity"])
         if num_labels > 1: # Не считая фон
@@ -122,24 +132,29 @@ class LaneFollowing(Node):
         fpt = (self.prevpt, window_center)
 
         self.error = fpt[0] - self.width // 2
-        # self.error /= (self.width / 2) # нормализация ошибки относительно ширины картинки 
+        # self.error /= (self.self.width / 2) # нормализация ошибки относительно ширины картинки 
         # Рисование
         cv2.cvtColor(self.dst, cv2.COLOR_GRAY2BGR)
-        for (px, py) in centroids:
-            cv2.circle(self.frame, (int(px), int(py) + blacked_part_size), 2, (0, 255, 0), 2)
+        image_with_rectangle = cv2.rectangle(self.frame, 
+                                             (left_crop, top_crop), 
+                                             (right_crop, bottom_crop), 
+                                             (0, 255, 0), 
+                                             2, 
+                                             cv2.LINE_AA)
         cv2.circle(self.frame, ((self.width // 2), window_center), 2, (0, 0, 255), 2)
         cv2.circle(self.frame, (int(fpt[0]), int(fpt[1])), 6, (0, 0, 255), 2)
         cv2.imshow("camera", self.frame)
-        cv2.imshow("gray", self.dst)
-        cv2.imshow("original_image", self.original_image)
+        # cv2.imshow("gray", self.dst)
+        # cv2.imshow("original_image", self.original_image)
         cv2.waitKey(1)
 
     def update_callback(self):
         if self.width is not None:
             cmd_vel = Twist()
             output = self.pid_controller.update(self.error)
-            cmd_vel.linear.x = max(params["max_velocity"] * ((1 - abs(self.error) / (self.width // 2)))**params["error_impact_on_linear_vel"], params['min_velocity'])
-            cmd_vel.angular.z = float(output)
+            if self.allow_running:
+                cmd_vel.linear.x = max(params["max_velocity"] * ((1 - abs(self.error) / (self.width // 2)))**params["error_impact_on_linear_vel"], params['min_velocity'])
+                cmd_vel.angular.z = float(output)
             self.cmd_vel_pub.publish(cmd_vel)
 
     def on_shutdown_method(self):
