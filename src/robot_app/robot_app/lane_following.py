@@ -5,6 +5,7 @@ from cv_bridge import CvBridge
 import cv2
 import numpy as np
 from geometry_msgs.msg import Twist
+from std_msgs.msg import String
 import time
 
 
@@ -71,7 +72,7 @@ params = {
 
 # (x, y)
 checkpoints = {
-    "forward": (445, 15),
+    "forward": (445, 40),
     "left": (5, 300),
     "right": (840, 300),
 }
@@ -80,11 +81,12 @@ class LaneFollowing(Node):
     def __init__(self):
         super().__init__('lanefollowing')
         self.img_sub = self.create_subscription(Image, '/color/image_projected_compensated', self.subs_callback, 10)
+        self.direction_sub = self.create_subscription(String, '/direction', self.direction_callback, 10)
         self.cmd_vel_pub = self.create_publisher(Twist, '/cmd_vel', 10)
         self.update_timer = self.create_timer(0.01, self.update_callback)
         self.bridge = CvBridge()
 
-        self.direction = "right" # forward (default) / left / right
+        self.direction = "forward" # forward (default) / left / right
         self.possible_directions = []
         self.allow_running = True
 
@@ -100,6 +102,9 @@ class LaneFollowing(Node):
 
         rclpy.get_default_context().on_shutdown(self.on_shutdown_method)
 
+    def direction_callback(self, msg):
+        self.direction = msg.data         
+
     def subs_callback(self, msg):
         self.frame = self.bridge.imgmsg_to_cv2(msg, "bgr8")
         self.original_image = self.frame
@@ -114,6 +119,7 @@ class LaneFollowing(Node):
 
         left_crop = 0
         right_crop = self.width
+
         if self.direction == 'left' and "left" in self.possible_directions:
             right_crop = int(params["right_border_crop"] * self.width)
         elif self.direction == 'right' and 'right' in self.possible_directions:

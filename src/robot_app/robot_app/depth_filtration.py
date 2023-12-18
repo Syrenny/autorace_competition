@@ -7,7 +7,7 @@ import cv2
 import numpy as np
 import time
 
-class LaneFollowing(Node):
+class DepthFilter(Node):
     def __init__(self):
         super().__init__('depth_filter')
 
@@ -40,7 +40,7 @@ class LaneFollowing(Node):
 
 def main(args=None):
     rclpy.init(args=args)
-    node = LaneFollowing()
+    node = DepthFilter()
     rclpy.spin(node)
     rclpy.shutdown()
 

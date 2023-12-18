@@ -77,7 +77,7 @@ def generate_launch_description():
             "use_sim_time": True,
         }],
         output='screen'
-    )   
+    )
 
     return LaunchDescription([
         gz_sim,

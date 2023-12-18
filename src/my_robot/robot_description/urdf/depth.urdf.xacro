@@ -51,7 +51,7 @@
                 </image>
                 <clip>
                     <near>0.1</near>
-                    <far>1</far>
+                    <far>10</far>
                 </clip>
                 <noise>
                     <type>gaussian</type>
@@ -73,9 +73,7 @@
                 </image>
                 <clip>
                     <near>0.1</near>
-                    <far>1</far>
-                    <!-- <far>50</far> -->
-
+                    <far>50</far>
                 </clip>
                 <noise>
                     <type>gaussian</type>
