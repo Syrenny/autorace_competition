@@ -33,7 +33,6 @@ class TrafficLightDetection(Node):
     def find_traffic_light(self, image_msg):
         # drop the frame to 1/5 (6fps) because of the processing speed. This is up to your computer's operating power.
         image = self.cv_bridge.imgmsg_to_cv2(image_msg, "bgr8")
-        image = image[:, image.shape[1]-400:]
         image_hsv = cv2.cvtColor(image, cv2.COLOR_BGR2HSV)
         try:
             send_msg = False
@@ -49,10 +48,9 @@ class TrafficLightDetection(Node):
                 lower_red = np.array([170,50,50])
                 upper_red = np.array([180,255,255])
                 mask1 = cv2.inRange(image_hsv, lower_red, upper_red)
-
                 # join my masks
                 mask = mask0+mask1
-                if len(mask != 0) > 50:
+                if np.sum(mask > 0) > 1000:
                     msg.data = self.current_light
                     self.current_light += 1
                     send_msg = True
@@ -60,8 +58,8 @@ class TrafficLightDetection(Node):
             elif self.current_light == 102:
                 lower_green=np.array([20, 100,100])
                 upper_green=np.array([30, 255, 255])
-                mask1 = cv2.inRange(image_hsv, lower_green, upper_green)
-                if len(mask != 0) > 50:
+                mask = cv2.inRange(image_hsv, lower_green, upper_green)
+                if np.sum(mask > 0) > 1000:
                     msg.data = self.current_light
                     self.current_light += 1
                     send_msg = True
@@ -70,13 +68,15 @@ class TrafficLightDetection(Node):
                 lower_green=np.array([50, 100,100])
                 upper_green=np.array([70, 255, 255])
                 mask = cv2.inRange(image_hsv, lower_green, upper_green)
-                if len(mask != 0) > 50:
+                if np.sum(mask > 0) > 1000:
                     msg.data = self.current_light
+                    self.current_light += 1
                     send_msg = True
 
             if send_msg:
                 self.traffic_light_order_publisher.publish(msg)
-                if self.current_light == 103:
+                if self.current_light == 104:
+                    print('run!!!!')
                     sys.exit()
                     
         except Exception:
