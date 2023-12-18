@@ -19,6 +19,24 @@ def generate_launch_description():
     pkg_autorace_camera = get_package_share_directory('autorace_camera')
     pkg_ros_gz_sim = get_package_share_directory('ros_gz_sim')
 
+    signs_detection = Node(
+            package='detection',
+            executable='signs_detection',
+            name='main',
+    )
+    
+    generated_signs_detection = Node(
+            package='detection',
+            executable='generated_signs_detection',
+            name='main',
+    )
+
+    traffic_light = Node(
+            package='detection',
+            executable='traffic_light',
+            name='main',
+    )
+
     depth_filter = Node(
             package='robot_app',
             executable='depth_filter',
@@ -39,6 +57,9 @@ def generate_launch_description():
    
 
     return LaunchDescription([
+        signs_detection,
+        generated_signs_detection,
+        traffic_light,
         depth_filter,
         camera,
         lane_following

@@ -1,31 +1,38 @@
 import rclpy
 from rclpy.node import Node
-import cv2
 import numpy as np
-from std_msgs.msg import String
+from std_msgs.msg import Integer
 import time
 
 
-class Direction(Node):
+states = {
+    "disable": 0,
+    "stop": 1,
+    "forward": 2,
+    "left": 3,
+    "right": 4
+}
+
+class Head(Node):
     def __init__(self):
-        super().__init__('direction')
-        self.direction_pub = self.create_publisher(String, '/direction', 10)
+        super().__init__('head')
+        self.direction_pub = self.create_publisher(Integer, '/state', 10)
         self.detection_sub = self.create_subscription(..., '...', self.subs_callback, 10)
         self.update_timer = self.create_timer(0.01, self.update_callback)
-        self.direction = "forward"
+        self.current_state = states["forward"]
 
     def subs_callback(self, msg):
         pass
 
     def update_callback(self):
-        msg = String()
-        msg.data = self.direction
+        msg = Integer()
+        msg.data = self.current_state
         self.direction_pub.publish(msg)
 
 
 def main(args=None):
     rclpy.init(args=args)
-    node = Direction()
+    node = Head()
     rclpy.spin(node)
     rclpy.shutdown()
 
