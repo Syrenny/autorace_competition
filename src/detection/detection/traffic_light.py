@@ -12,7 +12,7 @@ from cv_bridge import CvBridge
 class TrafficLightDetection(Node):
     def __init__(self):
         super().__init__('traffic_light_detector_node')
-        self.current_light = 101
+        self.current_light = 0
 
         self.image_camera_subscription = self.create_subscription(
             Image,
@@ -33,12 +33,13 @@ class TrafficLightDetection(Node):
     def find_traffic_light(self, image_msg):
         # drop the frame to 1/5 (6fps) because of the processing speed. This is up to your computer's operating power.
         image = self.cv_bridge.imgmsg_to_cv2(image_msg, "bgr8")
+        image = image[:, image.shape[1]//2:]
         image_hsv = cv2.cvtColor(image, cv2.COLOR_BGR2HSV)
         try:
             send_msg = False
             msg = UInt8()
 
-            if self.current_light == 101:
+            if self.current_light == 0:
                 # lower mask (0-10)
                 lower_red = np.array([0,50,50])
                 upper_red = np.array([10,255,255])
@@ -49,25 +50,28 @@ class TrafficLightDetection(Node):
                 upper_red = np.array([180,255,255])
                 mask1 = cv2.inRange(image_hsv, lower_red, upper_red)
                 # join my masks
-                mask = mask0+mask1
+                mask = mask0 + mask1
+                print(np.sum(mask > 0))
                 if np.sum(mask > 0) > 1000:
                     msg.data = self.current_light
                     self.current_light += 1
                     send_msg = True
 
-            elif self.current_light == 102:
+            elif self.current_light == 1:
                 lower_green=np.array([20, 100,100])
                 upper_green=np.array([30, 255, 255])
                 mask = cv2.inRange(image_hsv, lower_green, upper_green)
+                print(np.sum(mask > 0))
                 if np.sum(mask > 0) > 1000:
                     msg.data = self.current_light
                     self.current_light += 1
                     send_msg = True
 
-            elif self.current_light == 103:
+            elif self.current_light == 2:
                 lower_green=np.array([50, 100,100])
                 upper_green=np.array([70, 255, 255])
                 mask = cv2.inRange(image_hsv, lower_green, upper_green)
+                print(np.sum(mask > 0))
                 if np.sum(mask > 0) > 1000:
                     msg.data = self.current_light
                     self.current_light += 1
@@ -75,8 +79,8 @@ class TrafficLightDetection(Node):
 
             if send_msg:
                 self.traffic_light_order_publisher.publish(msg)
-                if self.current_light == 104:
-                    print('run!!!!')
+                if self.current_light == 3:
+                    print('Start moving!!!')
                     sys.exit()
                     
         except Exception:

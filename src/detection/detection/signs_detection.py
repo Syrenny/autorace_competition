@@ -13,11 +13,11 @@ class SignDetection(Node):
     def __init__(self):
         super().__init__('sing_detector_node')
         self.signs_order = {
-            0: ('traffic_intersection.png', 12), 
-            1: ('traffic_construction.png', 24), 
-            2: ('parking_lot.png', 10), 
-            3: ('pedestrian_crossing.png', 5), 
-            4: ('tunnel.png', 10)
+            0: ('traffic_intersection.png', 12, 3), 
+            1: ('traffic_construction.png', 24, 6), 
+            2: ('parking_lot.png', 10, 7), 
+            3: ('pedestrian_crossing.png', 5, 8), 
+            4: ('tunnel.png', 10, 9)
         }
         self.current_sign_number = 0
         self.prepare_detector()
@@ -108,7 +108,7 @@ class SignDetection(Node):
                 if pattern_area / 2 > found_matching_area:
                     raise Exception()
                 msg_sign_number = UInt8()
-                msg_sign_number.data = self.current_sign_number
+                msg_sign_number.data = self.signs_order[self.current_sign_number][2]
                 self.sign_number_publisher.publish(msg_sign_number)
                 print(f"Sign {self.signs_order[self.current_sign_number][0]} was found")
                 self.current_sign_number += 1

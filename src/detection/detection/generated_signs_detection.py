@@ -80,14 +80,14 @@ class GenSignDetection(Node):
 
                 if len(good_left) > len(good_right) and len(good_left) > self.min_match_count:
                     msg_sign_number = UInt8()
-                    msg_sign_number.data = 10
+                    msg_sign_number.data = 5
                     self.direction_signs_publisher.publish(msg_sign_number)
                     print('found left sign')
                     sys.exit()
 
                 elif len(good_left) < len(good_right) and len(good_right) > self.min_match_count:
                     msg_sign_number = UInt8()
-                    msg_sign_number.data = 20
+                    msg_sign_number.data = 4
                     self.direction_signs_publisher.publish(msg_sign_number)
                     print('found right sign')
                     sys.exit()
