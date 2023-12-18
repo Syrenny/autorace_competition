@@ -30,6 +30,7 @@ class PIDController:
         self.setpoint = setpoint  # Заданное значение
         self.prev_error = 0  # Предыдущее значение ошибки
         self.integral_sum = 0  # Сумма значений ошибки для интеграции
+        self.num_iters = 1
 
     def update(self, current_value):
         # Расчет ошибки
@@ -38,33 +39,41 @@ class PIDController:
         proportional = self.kp * error
         # Интегральная составляющая
         self.integral_sum += error
-        integral = self.ki * self.integral_sum
+        integral = self.ki * self.integral_sum / self.num_iters
         # Дифференциальная составляющая
         derivative = self.kd * (error - self.prev_error)
         # Общий выход PID-регулятора
         output = proportional + integral + derivative
         # Сохранение текущего значения ошибки для использования на следующем шаге
         self.prev_error = error
+        self.num_iters += 1
         return output
 
 pid_params = {
-    'kp': 0.004,
-    'ki': 0.0,
-    'kd': 0.0,
+    'kp': 8e-3,
+    'ki': 5e-4,
+    'kd': 3e-4,
     'setpoint': 0,
 }
 
 params = {
-    "top_border_crop": 7 / 10,
-    "bottom_border_crop": 9 / 10, # top_border_crop < bottom_border_crop
-    "left_border_crop": 0.0, 
-    "right_border_crop": 1.0, # left_border_crop < right_border_crop 
+    "top_border_crop": 8 / 10,
+    "bottom_border_crop": 10 / 10, # top_border_crop < bottom_border_crop
+    "left_border_crop": 0.3, 
+    "right_border_crop": 0.7, # left_border_crop < right_border_crop 
     "max_velocity": 0.35,
-    "min_velocity": 0.05,
+    "min_velocity": 0.00,
     # Степень >= 1.0. Чем больше значение, тем больше линейная скорость зависит от ошибки
-    "error_impact_on_linear_vel": 2, 
+    "error_impact_on_linear_vel": 5.0, 
     "previous_point_impact": 0.0, # 0 <= x < 1.0
     "connectivity": 8,
+}
+
+# (x, y)
+checkpoints = {
+    "forward": (445, 15),
+    "left": (5, 300),
+    "right": (840, 300),
 }
 
 class LaneFollowing(Node):
@@ -75,7 +84,9 @@ class LaneFollowing(Node):
         self.update_timer = self.create_timer(0.01, self.update_callback)
         self.bridge = CvBridge()
 
-        self.allow_running = False
+        self.direction = "right" # forward (default) / left / right
+        self.possible_directions = []
+        self.allow_running = True
 
         self.pid_controller = PIDController(**pid_params)
         self.width = None
@@ -94,16 +105,21 @@ class LaneFollowing(Node):
         self.original_image = self.frame
         self.frame = keep_road(self.frame)
 
-        self.gray = cv2.cvtColor(self.frame, cv2.COLOR_BGR2GRAY)
-        self.gray = cv2.GaussianBlur(self.gray, (9, 9), cv2.BORDER_DEFAULT)
-        _, self.gray = cv2.threshold(self.gray, 160, 255, cv2.THRESH_BINARY)
+        self.frame = cv2.cvtColor(self.frame, cv2.COLOR_BGR2GRAY)
+        self.frame = cv2.GaussianBlur(self.frame, (9, 9), cv2.BORDER_DEFAULT)
+        _, self.frame = cv2.threshold(self.frame, 160, 255, cv2.THRESH_BINARY)
+        self.gray = np.copy(self.frame)
+
         height, self.width = self.gray.shape
 
-        left_crop = int(params["left_border_crop"] * self.width)
-        right_crop = int(params["right_border_crop"] * self.width)
+        left_crop = 0
+        right_crop = self.width
+        if self.direction == 'left' and "left" in self.possible_directions:
+            right_crop = int(params["right_border_crop"] * self.width)
+        elif self.direction == 'right' and 'right' in self.possible_directions:
+            left_crop = int(params["left_border_crop"] * self.width)
         self.gray[:, :left_crop] = 0
         self.gray[:, right_crop:] = 0
-
 
         top_crop = int(height * params["top_border_crop"])
         bottom_crop = int(height * params["bottom_border_crop"])
@@ -115,6 +131,22 @@ class LaneFollowing(Node):
         if num_labels > 1: # Не считая фон
             # Индекс области с наибольшей площадью (исключаем фон)
             largest_area_index = np.argmax(stats[1:, cv2.CC_STAT_AREA]) + 1
+            
+            self.possible_directions = []
+            _, frame_labels, _, _ = cv2.connectedComponentsWithStats(self.frame, connectivity=params["connectivity"])
+            frame_aim_point = (int(centroids[largest_area_index][0]), int(centroids[largest_area_index][1] + top_crop)) # (x, y)
+
+            if frame_labels[frame_aim_point[1], frame_aim_point[0]] == frame_labels[checkpoints["forward"][1], checkpoints["forward"][0]]:
+                self.possible_directions.append("forward")
+
+            if frame_labels[frame_aim_point[1], frame_aim_point[0]] == frame_labels[checkpoints["left"][1], checkpoints["left"][0]]:
+                self.possible_directions.append("left")
+
+            if frame_labels[frame_aim_point[1], frame_aim_point[0]] == frame_labels[checkpoints["right"][1], checkpoints["right"][0]]:
+                self.possible_directions.append("right")
+            self.get_logger().info(f"Possible directions: {self.possible_directions}\n"
+                                   f"Value {frame_aim_point} shape {self.frame.shape}")
+
             # Получаем центроиду для области с наибольшей площадью
             if self.prevpt is not None:
                 self.prevpt = self.prevpt * params["previous_point_impact"] + centroids[largest_area_index][0] * (1 - params["previous_point_impact"])
@@ -126,18 +158,20 @@ class LaneFollowing(Node):
         self.error = fpt[0] - self.width // 2
         # self.error /= (self.self.width / 2) # нормализация ошибки относительно ширины картинки 
         # Рисование
-        cv2.cvtColor(self.dst, cv2.COLOR_GRAY2BGR)
+        self.frame = cv2.cvtColor(self.frame, cv2.COLOR_GRAY2BGR)
         cv2.rectangle(self.frame, 
                       (left_crop, top_crop), 
                       (right_crop, bottom_crop), 
                       (0, 255, 0), 
                       2, 
                       cv2.LINE_AA)
+        for _, (px, py) in checkpoints.items():
+            cv2.circle(self.frame, (px, py), 2, (0, 255, 0), 2)
         cv2.circle(self.frame, ((self.width // 2), window_center), 2, (0, 0, 255), 2)
         cv2.circle(self.frame, (int(fpt[0]), int(fpt[1])), 6, (0, 0, 255), 2)
         cv2.imshow("camera", self.frame)
         # cv2.imshow("gray", self.dst)
-        cv2.imshow("original_image", self.original_image)
+        # cv2.imshow("original_image", self.original_image)
         cv2.waitKey(1)
 
     def update_callback(self):
