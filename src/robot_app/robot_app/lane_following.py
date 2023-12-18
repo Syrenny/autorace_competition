@@ -5,7 +5,7 @@ from cv_bridge import CvBridge
 import cv2
 import numpy as np
 from geometry_msgs.msg import Twist
-from std_msgs.msg import Integer
+from std_msgs.msg import UInt8
 import time
 
 
@@ -60,10 +60,10 @@ pid_params = {
 params = {
     "top_border_crop": 8 / 10,
     "bottom_border_crop": 10 / 10, # top_border_crop < bottom_border_crop
-    "left_border_crop": 0.3, 
-    "right_border_crop": 0.7, # left_border_crop < right_border_crop 
+    "left_border_crop": 0.4, 
+    "right_border_crop": 0.6, # left_border_crop < right_border_crop 
     "max_velocity": 0.35,
-    "min_velocity": 0.00,
+    "min_velocity": 0.05,
     # Степень >= 1.0. Чем больше значение, тем больше линейная скорость зависит от ошибки
     "error_impact_on_linear_vel": 5.0, 
     "previous_point_impact": 0.0, # 0 <= x < 1.0
@@ -81,12 +81,12 @@ class LaneFollowing(Node):
     def __init__(self):
         super().__init__('lane_following')
         self.img_sub = self.create_subscription(Image, '/color/image_projected_compensated', self.subs_callback, 10)
-        self.state_sub = self.create_subscription(Integer, '/state', self.state_callback, 10)
+        self.state_sub = self.create_subscription(UInt8, '/state', self.state_callback, 10)
         self.cmd_vel_pub = self.create_publisher(Twist, '/cmd_vel', 10)
         self.update_timer = self.create_timer(0.01, self.update_callback)
         self.bridge = CvBridge()
 
-        self.stop = False 
+        self.stop = False
         self.enable = True
         self.direction = "forward" # forward (default) / left / right
         self.possible_directions = []
@@ -171,8 +171,11 @@ class LaneFollowing(Node):
 
                 if frame_labels[frame_aim_point[1], frame_aim_point[0]] == frame_labels[checkpoints["right"][1], checkpoints["right"][0]]:
                     self.possible_directions.append("right")
-                self.get_logger().info(f"Possible directions: {self.possible_directions}\n"
-                                    f"Current direction {self.direction}")
+
+                if "left" in self.possible_directions and "right" in self.possible_directions and "forward" not in self.possible_directions and self.direction == "forward":
+                    self.stop = True
+                # self.get_logger().info(f"Possible directions: {self.possible_directions}\n"
+                #                     f"Current direction {self.direction}")
 
                 # Получаем центроиду для области с наибольшей площадью
                 if self.prevpt is not None:
@@ -198,19 +201,17 @@ class LaneFollowing(Node):
             cv2.circle(self.frame, (int(fpt[0]), int(fpt[1])), 6, (0, 0, 255), 2)
             cv2.imshow("camera", self.frame)
             # cv2.imshow("gray", self.dst)
-            cv2.imshow("original_image", self.original_image)
+            # cv2.imshow("original_image", self.original_image)
             cv2.waitKey(1)
 
     def update_callback(self):
-        if self.width is not None:
+        if self.width is not None and self.enable:
             cmd_vel = Twist()
             output = self.pid_controller.update(self.error)
-            if self.enable:
+            if not self.stop:
                 cmd_vel.linear.x = max(params["max_velocity"] * ((1 - abs(self.error) / (self.width // 2)))**params["error_impact_on_linear_vel"], params['min_velocity'])
                 cmd_vel.angular.z = float(output)
-                self.cmd_vel_pub.publish(cmd_vel)
-            if self.stop:
-                self.cmd_vel_pub.publish(Twist())
+            self.cmd_vel_pub.publish(cmd_vel)
 
     def on_shutdown_method(self):
         cmd_vel = Twist()

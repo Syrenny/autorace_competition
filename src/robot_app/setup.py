@@ -22,6 +22,7 @@ setup(
         'console_scripts': [
         'lane_following = robot_app.lane_following:main',
         'depth_filter = robot_app.depth_filtration:main',
+        'head = robot_app.head:main'
         ],
     },
 )

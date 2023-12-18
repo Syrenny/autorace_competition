@@ -16,6 +16,7 @@ def generate_launch_description():
     # Setup project paths
     pkg_project_bringup = get_package_share_directory('robot_bringup')
     pkg_project_description = get_package_share_directory('robot_description')
+    pkg_detection = get_package_share_directory('detection')
     pkg_autorace_camera = get_package_share_directory('autorace_camera')
     pkg_ros_gz_sim = get_package_share_directory('ros_gz_sim')
 
@@ -54,7 +55,12 @@ def generate_launch_description():
             executable='lane_following',
             name='main'
     )
-   
+
+    head = Node(
+            package='robot_app',
+            executable='head',
+            name='main'
+    )
 
     return LaunchDescription([
         signs_detection,
@@ -62,5 +68,6 @@ def generate_launch_description():
         traffic_light,
         depth_filter,
         camera,
-        lane_following
+        lane_following,
+        head
     ])
