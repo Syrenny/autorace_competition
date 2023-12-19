@@ -62,7 +62,8 @@ class GenSignDetection(Node):
         if self.intersection_achieved:
             cv_image_input = self.cv_bridge.imgmsg_to_cv2(image_msg, "bgr8")
             cv_image_input = cv2.cvtColor(cv_image_input, cv2.COLOR_BGR2GRAY)
-            cv_image_input = cv_image_input[cv_image_input.shape[0]//2 - 200:cv_image_input.shape[0]//2, 100:cv_image_input.shape[1]-100]
+            cv_image_input = cv_image_input[cv_image_input.shape[0]//2 - 200:cv_image_input.shape[0]//2, 200:cv_image_input.shape[1]-200]
+            # cv2.imshow('pict', cv_image_input)
 
             try:
                 input_kp, input_des = self.orb.detectAndCompute(cv_image_input, None)
@@ -78,6 +79,7 @@ class GenSignDetection(Node):
                     if m.distance < 0.7 * n.distance:
                         good_right.append(m)
 
+                # print(len(good_left), len(good_right))
                 if len(good_left) > len(good_right) and len(good_left) > self.min_match_count:
                     msg_sign_number = UInt8()
                     msg_sign_number.data = 5
