@@ -2,7 +2,7 @@ import rclpy
 from rclpy.executors import MultiThreadedExecutor
 from rclpy.node import Node
 import numpy as np
-from std_msgs.msg import UInt8
+from std_msgs.msg import UInt8, Bool
 from sensor_msgs.msg import LaserScan
 
 import time
@@ -30,7 +30,6 @@ states = {
 
 
 enable_pedestrian_node = False 
-pedestrian_on_the_road = False 
 class Pedestrian(Node):
     def __init__(self):
         super().__init__('pedestrian')
@@ -40,6 +39,8 @@ class Pedestrian(Node):
             self.laser_scan_callback,
             10
         )
+        self.waiting = False
+        self.pub = self.create_publisher(Bool, '/knight_on_the_road', 10)
 
     def laser_scan_callback(self, msg):
         if enable_pedestrian_node:
@@ -47,13 +48,22 @@ class Pedestrian(Node):
 
     def compute(self, msg):
         # [164:197]
-        global pedestrian_on_the_road
         center_point = len(msg.ranges)
         view1 = np.array(msg.ranges[center_point - 18: center_point - 1])
-        view2 = np.array(msg.ranges[:18])
+        view2 = np.array(msg.ranges[:10])
         view = np.concatenate((view1, view2), axis=0)
-        if not np.all(view > 0.42):
-            pedestrian_on_the_road = True
+        msg = Bool()
+        if np.any(view < 0.42):
+            self.waiting = True
+            msg.data = True 
+        elif self.waiting:
+            msg.data = False 
+        if self.waiting: 
+            self.pub.publish(msg)
+
+         
+            
+
 
 
 class Head(Node):
@@ -61,6 +71,7 @@ class Head(Node):
         super().__init__('head')
         self.state_publisher = self.create_publisher(UInt8, '/state', 10)
         self.detection_sub = self.create_subscription(UInt8, '/sign_detection', self.detection_callback, 10)
+        self.pedestrian_sub = self.create_subscription(Bool, '/knight_on_the_road', self.pedestrian_callback, 10)
         # self.update_timer = self.create_timer(0.01, self.update_callback)
         self.current_state = states["stop"]
 
@@ -69,8 +80,18 @@ class Head(Node):
 
         self.sign_handler(msg.data)
 
+    def pedestrian_callback(self, msg):
+        global enable_pedestrian_node
+        if msg.data:
+            self.current_state = states["stop"]
+        else: 
+            self.current_state = states["forward"]
+            enable_pedestrian_node = False
+
+        self.publish_state()
+
     def sign_handler(self, sign):
-        global pedestrian_on_the_road, enable_pedestrian_node
+        global enable_pedestrian_node
         if sign == signs["red_light"] or sign == signs["yellow_light"]:
             self.current_state = states["stop"]
         elif sign == signs["green_light"]:
@@ -86,21 +107,19 @@ class Head(Node):
         elif sign == signs["parking"]:
             pass
         elif sign == signs["pedestrian"]:
+            self.current_state = states["forward"]
             enable_pedestrian_node = True
         elif sign == signs["tunnel"]:
-            enable_pedestrian_node = False 
-            pedestrian_on_the_road = False
+            enable_pedestrian_node = False
 
         self.get_logger().info(f"State handled: {list(states.keys())[self.current_state]}")
+        self.publish_state()
 
-        msg = UInt8()
-        if pedestrian_on_the_road:
-            msg.data = states["stop"]
-        else:
-            msg.data = self.current_state
-        self.state_publisher.publish(msg)
-            
-        self.get_logger().info(f"State published: {list(states.keys())[msg.data]}\n")
+    def publish_state(self):
+        state_msg = UInt8()
+        state_msg.data = self.current_state
+        self.state_publisher.publish(state_msg)
+        self.get_logger().info(f"State published: {list(states.keys())[state_msg.data]}\n")
         
         
 
