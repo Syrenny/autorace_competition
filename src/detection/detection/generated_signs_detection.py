@@ -12,7 +12,7 @@ from cv_bridge import CvBridge
 class GenSignDetection(Node):
     def __init__(self):
         super().__init__('denerative_sing_detector_node')
-        self.min_match_count = 3
+        self.min_match_count = 4
         self.current_sign_number = 0
         self.prepare_detector()
 
@@ -42,7 +42,7 @@ class GenSignDetection(Node):
         self.intersection_achieved = False
 
     def check_if_intersection(self, msg):
-        if msg.data == 0:
+        if msg.data == 3:
             print("intersection was found")
             self.intersection_achieved = True
 
@@ -62,7 +62,7 @@ class GenSignDetection(Node):
         if self.intersection_achieved:
             cv_image_input = self.cv_bridge.imgmsg_to_cv2(image_msg, "bgr8")
             cv_image_input = cv2.cvtColor(cv_image_input, cv2.COLOR_BGR2GRAY)
-            cv_image_input = cv_image_input[:cv_image_input.shape[0]//2, 200:cv_image_input.shape[1]-200]
+            cv_image_input = cv_image_input[cv_image_input.shape[0]//2 - 200:cv_image_input.shape[0]//2, 100:cv_image_input.shape[1]-100]
 
             try:
                 input_kp, input_des = self.orb.detectAndCompute(cv_image_input, None)
@@ -91,8 +91,7 @@ class GenSignDetection(Node):
                     self.direction_signs_publisher.publish(msg_sign_number)
                     print('found right sign')
                     sys.exit()
-                else:
-                    print(len(good_left), len(good_right))
+                    
                     
             except Exception:
                 pass

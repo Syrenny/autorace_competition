@@ -22,13 +22,30 @@ class TrafficLightDetection(Node):
         )
         self.image_camera_subscription
 
+        self.check_for_finish = self.create_subscription(
+            UInt8,
+            '/sign_detection',
+            self.check_if_all_signs_were_found,
+            10
+        )
+        self.check_for_finish
+
         self.traffic_light_order_publisher = self.create_publisher(
             UInt8,
             '/sign_detection',
             10
         )
+
         self.cv_bridge = CvBridge()
         self.frame = None
+        self.need_to_check_finish = False
+        self.start_checked = False
+
+    def check_if_all_signs_were_found(self, msg):
+        if msg.data == 9:
+            print('detecting finish')
+            self.need_to_check_finish = True
+            self.current_light = 2
 
     def find_traffic_light(self, image_msg):
         # drop the frame to 1/5 (6fps) because of the processing speed. This is up to your computer's operating power.
@@ -36,55 +53,62 @@ class TrafficLightDetection(Node):
         image = image[:, image.shape[1]//2:]
         image_hsv = cv2.cvtColor(image, cv2.COLOR_BGR2HSV)
         try:
-            send_msg = False
-            msg = UInt8()
+            if self.start_checked == self.need_to_check_finish:
+                send_msg = False
+                msg = UInt8()
 
-            if self.current_light == 0:
-                # lower mask (0-10)
-                lower_red = np.array([0,50,50])
-                upper_red = np.array([10,255,255])
-                mask0 = cv2.inRange(image_hsv, lower_red, upper_red)
+                if self.current_light == 0:
+                    # lower mask (0-10)
+                    lower_red = np.array([0,50,50])
+                    upper_red = np.array([10,255,255])
+                    mask0 = cv2.inRange(image_hsv, lower_red, upper_red)
 
-                # upper mask (170-180)
-                lower_red = np.array([170,50,50])
-                upper_red = np.array([180,255,255])
-                mask1 = cv2.inRange(image_hsv, lower_red, upper_red)
-                # join my masks
-                mask = mask0 + mask1
-                print(np.sum(mask > 0))
-                if np.sum(mask > 0) > 1000:
-                    msg.data = self.current_light
-                    self.current_light += 1
-                    send_msg = True
+                    # upper mask (170-180)
+                    lower_red = np.array([170,50,50])
+                    upper_red = np.array([180,255,255])
+                    mask1 = cv2.inRange(image_hsv, lower_red, upper_red)
+                    # join my masks
+                    mask = mask0 + mask1
+                    if np.sum(mask > 0) > 3000:
+                        print('red')
+                        msg.data = self.current_light
+                        self.current_light += 1
+                        send_msg = True
 
-            elif self.current_light == 1:
-                lower_green=np.array([20, 100,100])
-                upper_green=np.array([30, 255, 255])
-                mask = cv2.inRange(image_hsv, lower_green, upper_green)
-                print(np.sum(mask > 0))
-                if np.sum(mask > 0) > 1000:
-                    msg.data = self.current_light
-                    self.current_light += 1
-                    send_msg = True
+                elif self.current_light == 1:
+                    lower_green=np.array([20, 100,100])
+                    upper_green=np.array([30, 255, 255])
+                    mask = cv2.inRange(image_hsv, lower_green, upper_green)
+                    if np.sum(mask > 0) > 3000:
+                        print('yellow')
+                        msg.data = self.current_light
+                        self.current_light += 1
+                        send_msg = True
 
-            elif self.current_light == 2:
-                lower_green=np.array([50, 100,100])
-                upper_green=np.array([70, 255, 255])
-                mask = cv2.inRange(image_hsv, lower_green, upper_green)
-                print(np.sum(mask > 0))
-                if np.sum(mask > 0) > 1000:
-                    msg.data = self.current_light
-                    self.current_light += 1
-                    send_msg = True
+                elif self.current_light == 2:
+                    lower_green=np.array([50, 100,100])
+                    upper_green=np.array([70, 255, 255])
+                    mask = cv2.inRange(image_hsv, lower_green, upper_green)
+                    if np.sum(mask > 0) > 3000:
+                        print('green')
+                        msg.data = self.current_light
+                        self.current_light += 1
+                        send_msg = True
 
-            if send_msg:
-                self.traffic_light_order_publisher.publish(msg)
-                if self.current_light == 3:
-                    print('Start moving!!!')
+                if send_msg and self.need_to_check_finish:
+                    msg.data = 10
+                    self.traffic_light_order_publisher.publish(msg)
                     sys.exit()
+
+                if send_msg:
+                    self.traffic_light_order_publisher.publish(msg)
+                    if self.current_light == 3:
+                        self.start_checked = True
+                        print('Start moving!!!')
                     
         except Exception:
             pass
+        
 
         cv2.waitKey(100)
 
