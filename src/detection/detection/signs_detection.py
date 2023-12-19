@@ -14,9 +14,9 @@ class SignDetection(Node):
         super().__init__('sing_detector_node')
         self.signs_order = {
             0: ('traffic_intersection.png', 12, 3), 
-            1: ('traffic_construction.png', 24, 6), 
+            1: ('traffic_construction.png', 18, 6), 
             2: ('parking_lot.png', 10, 7), 
-            3: ('pedestrian_crossing.png', 5, 8), 
+            3: ('pedestrian_crossing.png', 6, 8), 
             4: ('tunnel.png', 10, 9)
         }
         self.current_sign_number = 0
@@ -39,9 +39,9 @@ class SignDetection(Node):
         self.frame = None
 
     def detect_and_compute_current(self):
-        if self.current_sign_number > len(self.signs_order.keys()):
+        if self.current_sign_number > len(self.signs_order.keys()) - 1:
             print('All of the signs were successfully detected!')
-            print('Detection execution ends.')
+            print('Signs detection ends.')
             sys.exit()
         self.min_match_count = self.signs_order[self.current_sign_number][1]
         self.current_sign = cv2.imread(self.signs_path + '/' + self.signs_order[self.current_sign_number][0], 0)
@@ -83,7 +83,7 @@ class SignDetection(Node):
     def find_traffic_sign(self, image_msg):
         cv_image_input = self.cv_bridge.imgmsg_to_cv2(image_msg, "bgr8")
         cv_image_input = cv2.cvtColor(cv_image_input, cv2.COLOR_BGR2GRAY)
-        if self.current_sign_number in [2, 3]:
+        if self.current_sign_number in [1, 2, 3]:
             cv_image_input = cv_image_input[:, cv_image_input.shape[1]//2:]
         elif self.current_sign_number == 0:
             cv_image_input = cv_image_input[:, cv_image_input.shape[1]-400:]
@@ -96,6 +96,7 @@ class SignDetection(Node):
                 if m.distance < 0.7 * n.distance:
                     good.append(m)
 
+            # print(len(good))
             if len(good)>self.min_match_count:
                 src_pts = np.float32([ self.curr_kp[m.queryIdx].pt for m in good ]).reshape(-1,1,2)
                 dst_pts = np.float32([ input_kp[m.trainIdx].pt for m in good ]).reshape(-1,1,2)
