@@ -65,14 +65,14 @@ params = {
     "max_velocity": 0.35,
     "min_velocity": 0.05,
     # Степень >= 1.0. Чем больше значение, тем больше линейная скорость зависит от ошибки
-    "error_impact_on_linear_vel": 5.0, 
+    "error_impact_on_linear_vel": 4.0, 
     "previous_point_impact": 0.0, # 0 <= x < 1.0
     "connectivity": 8,
 }
 
 # (x, y)
 checkpoints = {
-    "forward": (445, 40),
+    "forward": (445, 5),
     "left": (5, 300),
     "right": (840, 300),
 }
@@ -86,7 +86,7 @@ class LaneFollowing(Node):
         self.update_timer = self.create_timer(0.01, self.update_callback)
         self.bridge = CvBridge()
 
-        self.stop = False
+        self.stop = True
         self.enable = True
         self.direction = "forward" # forward (default) / left / right
         self.possible_directions = []
@@ -109,13 +109,13 @@ class LaneFollowing(Node):
     def state_callback(self, msg):
         '''
         state: 
-        - 0: enable/disable (прекращает публикацию в cmd_vel)
+        - 0: disable (прекращает публикацию в cmd_vel)
         - 1: stop (публикует в cmd_vel пустой Twist)
         - 2: forward (default)
         - 3: left
         - 4: right
         '''
-        self.enable = msg.data != 0
+        self.enable = msg.data != 0 
         self.stop = msg.data == 1
         if msg.data == 2:
             self.direction = "forward"
@@ -172,7 +172,7 @@ class LaneFollowing(Node):
                 if frame_labels[frame_aim_point[1], frame_aim_point[0]] == frame_labels[checkpoints["right"][1], checkpoints["right"][0]]:
                     self.possible_directions.append("right")
 
-                if "left" in self.possible_directions and "right" in self.possible_directions and "forward" not in self.possible_directions and self.direction == "forward":
+                if ("left" in self.possible_directions) and ("right" in self.possible_directions) and ("forward" not in self.possible_directions) and (self.direction == "forward"):
                     self.stop = True
                 # self.get_logger().info(f"Possible directions: {self.possible_directions}\n"
                 #                     f"Current direction {self.direction}")
@@ -207,8 +207,8 @@ class LaneFollowing(Node):
     def update_callback(self):
         if self.width is not None and self.enable:
             cmd_vel = Twist()
-            output = self.pid_controller.update(self.error)
             if not self.stop:
+                output = self.pid_controller.update(self.error)
                 cmd_vel.linear.x = max(params["max_velocity"] * ((1 - abs(self.error) / (self.width // 2)))**params["error_impact_on_linear_vel"], params['min_velocity'])
                 cmd_vel.angular.z = float(output)
             self.cmd_vel_pub.publish(cmd_vel)

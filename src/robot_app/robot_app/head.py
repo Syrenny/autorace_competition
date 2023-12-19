@@ -61,23 +61,13 @@ class Head(Node):
         super().__init__('head')
         self.state_publisher = self.create_publisher(UInt8, '/state', 10)
         self.detection_sub = self.create_subscription(UInt8, '/sign_detection', self.detection_callback, 10)
-        self.update_timer = self.create_timer(0.01, self.update_callback)
+        # self.update_timer = self.create_timer(0.01, self.update_callback)
         self.current_state = states["stop"]
 
     def detection_callback(self, msg):
-        self.get_logger().info(f"Sign message received: {list(signs.keys())[msg.data]}\n")
+        self.get_logger().info(f"Sign message received: {list(signs.keys())[msg.data]}")
 
         self.sign_handler(msg.data)
-
-    def update_callback(self):
-        if self.current_state is not None:
-            msg = UInt8()
-            if pedestrian_on_the_road:
-                msg.data = states["stop"]
-            else:
-                msg.data = self.current_state
-            self.state_publisher.publish(msg)
-            self.get_logger().info(f"State published: {list(states.keys())[msg.data]}\n")
 
     def sign_handler(self, sign):
         global pedestrian_on_the_road, enable_pedestrian_node
@@ -100,9 +90,18 @@ class Head(Node):
         elif sign == signs["tunnel"]:
             enable_pedestrian_node = False 
             pedestrian_on_the_road = False
+
+        self.get_logger().info(f"State handled: {list(states.keys())[self.current_state]}")
+
+        msg = UInt8()
+        if pedestrian_on_the_road:
+            msg.data = states["stop"]
+        else:
+            msg.data = self.current_state
+        self.state_publisher.publish(msg)
             
+        self.get_logger().info(f"State published: {list(states.keys())[msg.data]}\n")
         
-        self.get_logger().info(f"State handled: {list(states.keys())[self.current_state]}\n")
         
 
 def main(args=None):
