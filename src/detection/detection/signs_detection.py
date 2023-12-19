@@ -16,7 +16,7 @@ class SignDetection(Node):
             0: ('traffic_intersection.png', 12, 3), 
             1: ('traffic_construction.png', 18, 6), 
             2: ('parking_lot.png', 10, 7), 
-            3: ('pedestrian_crossing.png', 6, 8), 
+            3: ('pedestrian_crossing.png', 4, 8), 
             4: ('tunnel.png', 10, 9)
         }
         self.current_sign_number = 0
